@@ -1,5 +1,5 @@
 # Zalo AI Challenge - Voice Verification
-This repository contains the framework for training speaker verification model described in [2]
+This repository contains the framework for training speaker verification model described in [2]  
 with score normalization post-processing described in [3].
 
 ## Dependencies
@@ -33,7 +33,7 @@ python train.py --augment --max_epoch 500 --batch_size 320 --initial_model check
 ## Inference
 1. Prepare cohorts
 ```python
-python inference.py --prepare --prepare_cohorts --cohorts_path checkpoints/cohorts_final_500_f100.npy --initial_model checkpoints/final_500.model
+python inference.py --prepare --save_path checkpoints/cohorts_final_500_f100.npy --initial_model checkpoints/final_500.model
 ```
 
 2. Evaluate and tune thresholds

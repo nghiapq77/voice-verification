@@ -19,7 +19,6 @@ class ResNetSE(nn.Module):
         super(ResNetSE, self).__init__()
 
         # print('Embedding size is %d, encoder %s.' % (nOut, encoder_type))
-
         self.inplanes = num_filters[0]
         self.encoder_type = encoder_type
         self.n_mels = n_mels
@@ -105,11 +104,6 @@ class ResNetSE(nn.Module):
             layers.append(block(self.inplanes, planes))
 
         return nn.Sequential(*layers)
-
-    def new_parameter(self, *size):
-        out = nn.Parameter(torch.FloatTensor(*size))
-        nn.init.xavier_normal_(out)
-        return out
 
     def forward(self, x):
 

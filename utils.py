@@ -2,6 +2,8 @@ import numpy as np
 import random
 import os
 import glob
+from argparse import Namespace
+import yaml
 from scipy import signal
 from scipy.io import wavfile
 from sklearn import metrics
@@ -108,7 +110,7 @@ class AugmentWAV(object):
 
 class voxceleb_loader(Dataset):
     def __init__(self, dataset_file_name, augment, musan_path, rir_path,
-                 max_frames, train_path):
+                 max_frames):
 
         self.augment_wav = AugmentWAV(musan_path=musan_path,
                                       rir_path=rir_path,
@@ -225,10 +227,10 @@ class voxceleb_sampler(torch.utils.data.Sampler):
 
 def get_data_loader(dataset_file_name, batch_size, augment, musan_path,
                     rir_path, max_frames, max_seg_per_spk, nDataLoaderThread,
-                    nPerSpeaker, train_path, **kwargs):
+                    nPerSpeaker, **kwargs):
 
     train_dataset = voxceleb_loader(dataset_file_name, augment, musan_path,
-                                    rir_path, max_frames, train_path)
+                                    rir_path, max_frames)
 
     train_sampler = voxceleb_sampler(train_dataset, nPerSpeaker,
                                      max_seg_per_spk, batch_size)
@@ -258,7 +260,6 @@ def accuracy(output, target, topk=(1, )):
     res = []
 
     for k in topk:
-        # correct_k = correct[:k].view(-1).float().sum(0, keepdim=True)
         correct_k = correct[:k].reshape(-1).float().sum(0, keepdim=True)
         res.append(correct_k.mul_(100.0 / batch_size))
     return res
@@ -297,8 +298,7 @@ def tuneThresholdfromScore(scores, labels, target_fa, target_fr=None):
             tunedThreshold.append([thresholds[idx], fpr[idx], fnr[idx]])
 
     for tfa in target_fa:
-        idx = np.nanargmin(np.absolute(
-            (tfa - fpr)))  # numpy.where(fpr<=tfa)[0][-1]
+        idx = np.nanargmin(np.absolute((tfa - fpr)))
         tunedThreshold.append([thresholds[idx], fpr[idx], fnr[idx]])
 
     idxE = np.nanargmin(np.absolute((fnr - fpr)))
@@ -332,3 +332,17 @@ def score_normalization(ref, com, cohorts, top=-1):
     ref = ref.cpu().numpy()
     com = com.cpu().numpy()
     return S_norm(ref, com, top=top)
+
+
+def read_config(config_path, args=None):
+    if args is None:
+        args = Namespace()
+    with open(config_path, "r") as f:
+        yml_config = yaml.load(f, Loader=yaml.FullLoader)
+    for k, v in yml_config.items():
+        args.__dict__[k] = v
+    return args
+
+
+if __name__ == '__main__':
+    pass

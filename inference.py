@@ -1,13 +1,20 @@
 import argparse
 import numpy as np
+from pathlib import Path
 import sys
-import torch
+import random
 from tqdm import tqdm
+from math import fabs
+import torch
+import torch.nn.functional as F
 
 from model import SpeakerNet
-from utils import tuneThresholdfromScore
+from utils import read_config, tuneThresholdfromScore
 
 parser = argparse.ArgumentParser(description="SpeakerNet")
+
+# YAML config
+parser.add_argument('--config', type=str, default=None)
 
 # Data loader
 parser.add_argument('--max_frames',
@@ -37,13 +44,14 @@ parser.add_argument('--augment',
                     help='Augment input')
 
 # Training details
+parser.add_argument('--device', type=str, default="cuda", help='cuda or cpu')
 parser.add_argument('--test_interval',
                     type=int,
                     default=10,
                     help='Test and save every [test_interval] epochs')
 parser.add_argument('--max_epoch',
                     type=int,
-                    default=1000,
+                    default=500,
                     help='Maximum number of epochs')
 parser.add_argument('--trainfunc',
                     type=str,
@@ -118,19 +126,15 @@ parser.add_argument('--save_path',
 # Training and test data
 parser.add_argument('--train_list',
                     type=str,
-                    default="dataset/train.txt",
+                    default="dataset/train.def.txt",
                     help='Train list')
 parser.add_argument('--test_list',
                     type=str,
-                    default="dataset/val.txt",
+                    default="dataset/val.def.txt",
                     help='Evaluation list')
-parser.add_argument('--train_path',
-                    type=str,
-                    default="dataset/wavs",
-                    help='Absolute path to the train set')
 parser.add_argument('--test_path',
                     type=str,
-                    default="dataset/wavs",
+                    default="dataset/",
                     help='Absolute path to the test set')
 parser.add_argument('--musan_path',
                     type=str,
@@ -176,10 +180,11 @@ parser.add_argument('--prepare',
                     dest='prepare',
                     action='store_true',
                     help='Prepare embeddings')
-parser.add_argument('--prepare_cohorts',
-                    action='store_true',
-                    default=False,
-                    help='Prepare cohorts')
+parser.add_argument('-t',
+                    '--prepare_type',
+                    type=str,
+                    default='cohorts',
+                    help='embed / cohorts')
 parser.add_argument('--predict',
                     dest='predict',
                     action='store_true',
@@ -194,6 +199,8 @@ parser.add_argument('--test_threshold',
                     help='Test threshold')
 
 args = parser.parse_args()
+if args.config is not None:
+    args = read_config(args.config, args)
 
 # Load models
 model = SpeakerNet(**vars(args))
@@ -203,7 +210,6 @@ cohorts = np.load('checkpoints/cohorts_final_500_f100.npy')
 top_cohorts = 200
 threshold = 1.7206447124481201
 eval_frames = 100
-# print("Model %s loaded!" % args.initial_model)
 
 if __name__ == '__main__':
     # Evaluation code
@@ -212,12 +218,8 @@ if __name__ == '__main__':
             args.test_list,
             cohorts_path=args.cohorts_path,
             print_interval=100,
-            test_path=args.test_path,
             eval_frames=args.eval_frames)
-        target_fa = [
-            6, 5.5, 5, 4.5, 4, 3.5, 3, 2.75, 2.5, 2, 1.75, 1.5, 1, 0.7, 0.5,
-            0.3, 0.1
-        ]
+        target_fa = np.linspace(10, 0, num=50)
         result = tuneThresholdfromScore(sc, lab, target_fa)
         print('tfa [thre, fpr, fnr]')
         best_sum_rate = 999
@@ -236,9 +238,9 @@ if __name__ == '__main__':
     # Test code
     if args.test is True:
         model.testFromList(args.test_path,
+                           cohorts_path=args.cohorts_path,
                            thre_score=args.test_threshold,
                            print_interval=100,
-                           test_path=args.test_path,
                            eval_frames=args.eval_frames)
         sys.exit(1)
 
@@ -247,10 +249,81 @@ if __name__ == '__main__':
         model.prepare(eval_frames=args.eval_frames,
                       from_path=args.test_list,
                       save_path=args.save_path,
-                      prepare_cohorts=args.prepare_cohorts)
+                      prepare_type=args.prepare_type)
         sys.exit(1)
 
     # Predict
     if args.predict is True:
-        model.predict(eval_frames=args.eval_frames)
+        """
+        Predict new utterance based on distance between its embedding and saved embeddings.
+        """
+        embeds_path = Path(args.save_path, 'embeds.pt')
+        classes_path = Path(args.save_path, 'classes.npy')
+        embeds = torch.load(embeds_path).to(torch.device(args.device))
+        classes = np.load(classes_path, allow_pickle=True).item()
+        if args.test_list.endswith('.txt'):
+            files = []
+            with open(args.test_list) as listfile:
+                while True:
+                    line = listfile.readline()
+                    if (not line):
+                        break
+                    data = line.split()
+
+                    # Append random label if missing
+                    if len(data) == 2:
+                        data = [random.randint(0, 1)] + data
+
+                    files.append(Path(data[1]))
+                    files.append(Path(data[2]))
+
+            files = list(set(files))
+            files.sort()
+        else:
+            files = list(Path(args.test_list).glob('*/*.wav'))
+
+        same_smallest_score = 1
+        diff_biggest_score = 0
+        for f in tqdm(files):
+            embed = model.embed_utterance(f,
+                                          eval_frames=args.eval_frames,
+                                          num_eval=10,
+                                          normalize=model.__L__.test_normalize)
+            embed = embed.unsqueeze(-1)
+            dist = F.pairwise_distance(embed, embeds).detach().cpu().numpy()
+            dist = np.mean(dist, axis=0)
+            score = 1 - np.min(dist)**2 / 2
+            if classes[np.argmin(dist)] == f.parent.stem:
+                if score < same_smallest_score:
+                    same_smallest_score = score
+                indexes = np.argsort(dist)[:2]
+                if fabs((1 - dist[indexes[0]]**2 / 2) - (1 - dist[indexes[1]]**2 / 2)) < 0.001:
+                    for i, idx in enumerate(indexes):
+                        score = 1 - dist[idx]**2 / 2
+                        if i == 0:
+                            tqdm.write(f'+ {f}, {score} - {classes[idx]}',
+                                       end='; ')
+                        else:
+                            tqdm.write(f'{score} - {classes[idx]}', end='; ')
+                    tqdm.write('***')
+                else:
+                    tqdm.write(f'+ {f}, {score}', end='')
+                    if score < args.test_threshold:
+                        tqdm.write(' ***', end='')
+                    tqdm.write('')
+            else:
+                if score > diff_biggest_score:
+                    diff_biggest_score = score
+                if score > args.test_threshold:
+                    indexes = np.argsort(dist)[:3]
+                    for i, idx in enumerate(indexes):
+                        score = 1 - dist[idx]**2 / 2
+                        if i == 0:
+                            tqdm.write(f'- {f}, {score} - {classes[idx]}',
+                                       end='; ')
+                        else:
+                            tqdm.write(f'{score} - {classes[idx]}', end='; ')
+                    tqdm.write('***')
+        print(f'same_smallest_score: {same_smallest_score}')
+        print(f'diff_biggest_score: {diff_biggest_score}')
         sys.exit(1)

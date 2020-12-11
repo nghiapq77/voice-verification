@@ -7,4 +7,3 @@ tqdm
 pyyaml
 flask
 flask-restful
-einops

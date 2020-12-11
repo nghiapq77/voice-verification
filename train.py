@@ -37,13 +37,14 @@ parser.add_argument('--augment',
                     help='Augment input')
 
 # Training details
+parser.add_argument('--device', type=str, default="cuda", help='cuda or cpu')
 parser.add_argument('--test_interval',
                     type=int,
                     default=10,
                     help='Test and save every [test_interval] epochs')
 parser.add_argument('--max_epoch',
                     type=int,
-                    default=1000,
+                    default=500,
                     help='Maximum number of epochs')
 parser.add_argument('--trainfunc',
                     type=str,
@@ -118,20 +119,12 @@ parser.add_argument('--save_path',
 # Training and test data
 parser.add_argument('--train_list',
                     type=str,
-                    default="dataset/train.txt",
+                    default="dataset/train.def.txt",
                     help='Train list')
 parser.add_argument('--test_list',
                     type=str,
-                    default="dataset/val.txt",
+                    default="dataset/val.def.txt",
                     help='Evaluation list')
-parser.add_argument('--train_path',
-                    type=str,
-                    default="dataset/wavs",
-                    help='Absolute path to the train set')
-parser.add_argument('--test_path',
-                    type=str,
-                    default="dataset/wavs",
-                    help='Absolute path to the test set')
 parser.add_argument('--musan_path',
                     type=str,
                     default="dataset/musan_split",

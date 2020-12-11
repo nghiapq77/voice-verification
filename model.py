@@ -10,22 +10,22 @@ import csv
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from einops import rearrange
 
 from utils import loadWAV, score_normalization
 
 
 class SpeakerNet(nn.Module):
-    def __init__(self, model, optimizer, scheduler, trainfunc, **kwargs):
+    def __init__(self, model, optimizer, scheduler, trainfunc, device, **kwargs):
         super(SpeakerNet, self).__init__()
+        self.device = torch.device(device)
 
         SpeakerNetModel = importlib.import_module(
             'models.' + model).__getattribute__('MainModel')
-        self.__S__ = SpeakerNetModel(**kwargs).cuda()
+        self.__S__ = SpeakerNetModel(**kwargs).to(self.device)
 
         LossFunction = importlib.import_module(
             'loss.' + trainfunc).__getattribute__('LossFunction')
-        self.__L__ = LossFunction(**kwargs).cuda()
+        self.__L__ = LossFunction(**kwargs).to(self.device)
 
         Optimizer = importlib.import_module(
             'optimizer.' + optimizer).__getattribute__('Optimizer')
@@ -33,13 +33,11 @@ class SpeakerNet(nn.Module):
 
         Scheduler = importlib.import_module(
             'scheduler.' + scheduler).__getattribute__('Scheduler')
-        self.__scheduler__, self.lr_step = Scheduler(self.__optimizer__,
-                                                     **kwargs)
+        self.__scheduler__, self.lr_step = Scheduler(self.__optimizer__, **kwargs)
 
         assert self.lr_step in ['epoch', 'iteration']
 
     def train_network(self, loader):
-
         self.train()
 
         stepsize = loader.batch_size
@@ -56,11 +54,11 @@ class SpeakerNet(nn.Module):
             self.zero_grad()
             feat = []
             for inp in data:
-                outp = self.__S__.forward(inp.cuda())
+                outp = self.__S__.forward(inp.to(self.device))
                 feat.append(outp)
 
             feat = torch.stack(feat, dim=1).squeeze()
-            label = torch.LongTensor(data_label).cuda()
+            label = torch.LongTensor(data_label).to(self.device)
             nloss, prec1 = self.__L__.forward(feat, label)
 
             loss += nloss.detach().cpu()
@@ -94,7 +92,6 @@ class SpeakerNet(nn.Module):
                          listfilename,
                          cohorts_path='dataset/cohorts.npy',
                          print_interval=100,
-                         test_path='',
                          num_eval=10,
                          eval_frames=None,
                          is_train=False):
@@ -132,7 +129,7 @@ class SpeakerNet(nn.Module):
         for idx, file in enumerate(setfiles):
             inp1 = torch.FloatTensor(
                 loadWAV(file, eval_frames, evalmode=True,
-                        num_eval=num_eval)).cuda()
+                        num_eval=num_eval)).to(self.device)
 
             with torch.no_grad():
                 ref_feat = self.__S__.forward(inp1).detach().cpu()
@@ -141,8 +138,7 @@ class SpeakerNet(nn.Module):
             if idx % print_interval == 0:
                 sys.stdout.write(
                     "\rReading %d of %d: %.2f Hz, %.4f s, embedding size %d" %
-                    (idx, len(setfiles), idx / telapsed, telapsed /
-                     (idx + 1), ref_feat.size()[1]))
+                    (idx, len(setfiles), idx / telapsed, telapsed / (idx + 1), ref_feat.size()[1]))
 
         print('')
         all_scores = []
@@ -158,8 +154,8 @@ class SpeakerNet(nn.Module):
             if len(data) == 2:
                 data = [random.randint(0, 1)] + data
 
-            ref_feat = feats[data[1]].cuda()
-            com_feat = feats[data[2]].cuda()
+            ref_feat = feats[data[1]].to(self.device)
+            com_feat = feats[data[2]].to(self.device)
 
             if self.__L__.test_normalize:
                 ref_feat = F.normalize(ref_feat, p=2, dim=1)
@@ -185,8 +181,7 @@ class SpeakerNet(nn.Module):
             if idx % print_interval == 0:
                 telapsed = time.time() - tstart
                 sys.stdout.write("\rComputing %d of %d: %.2f Hz - %.4f s" %
-                                 (idx, len(lines),
-                                  (idx + 1) / telapsed, telapsed / (idx + 1)))
+                                 (idx, len(lines), (idx + 1) / telapsed, telapsed / (idx + 1)))
                 sys.stdout.flush()
 
         print('\n')
@@ -198,7 +193,6 @@ class SpeakerNet(nn.Module):
                      thre_score=0.5,
                      cohorts_path='data/zalo/cohorts.npy',
                      print_interval=100,
-                     test_path='',
                      num_eval=10,
                      eval_frames=None):
         self.eval()
@@ -233,7 +227,7 @@ class SpeakerNet(nn.Module):
                 loadWAV(Path(data_root, file),
                         eval_frames,
                         evalmode=True,
-                        num_eval=num_eval)).cuda()
+                        num_eval=num_eval)).to(self.device)
             with torch.no_grad():
                 ref_feat = self.__S__.forward(inp1).detach().cpu()
             feats[file] = ref_feat
@@ -241,8 +235,7 @@ class SpeakerNet(nn.Module):
             if idx % print_interval == 0:
                 sys.stdout.write(
                     "\rReading %d of %d: %.2f Hz, %.4f s, embedding size %d" %
-                    (idx, len(setfiles), (idx + 1) / telapsed, telapsed /
-                     (idx + 1), ref_feat.size()[1]))
+                    (idx, len(setfiles), (idx + 1) / telapsed, telapsed / (idx + 1), ref_feat.size()[1]))
 
         print('')
         tstart = time.time()
@@ -252,8 +245,8 @@ class SpeakerNet(nn.Module):
             spamwriter = csv.writer(wf, delimiter=',')
             spamwriter.writerow(['audio_1', 'audio_2', 'label'])
             for idx, data in enumerate(lines):
-                ref_feat = feats[data[0]].cuda()
-                com_feat = feats[data[1]].cuda()
+                ref_feat = feats[data[0]].to(self.device)
+                com_feat = feats[data[1]].to(self.device)
 
                 if self.__L__.test_normalize:
                     ref_feat = F.normalize(ref_feat, p=2, dim=1)
@@ -271,9 +264,7 @@ class SpeakerNet(nn.Module):
                 if idx % print_interval == 0:
                     telapsed = time.time() - tstart
                     sys.stdout.write("\rComputing %d of %d: %.2f Hz, %.4f s" %
-                                     (idx, len(lines),
-                                      (idx + 1) / telapsed, telapsed /
-                                      (idx + 1)))
+                                     (idx, len(lines), (idx + 1) / telapsed, telapsed / (idx + 1)))
                     sys.stdout.flush()
 
         print('\n')
@@ -281,7 +272,7 @@ class SpeakerNet(nn.Module):
     def prepare(self,
                 from_path='../data/test',
                 save_path='checkpoints',
-                prepare_cohorts=False,
+                prepare_type='cohorts',
                 num_eval=10,
                 eval_frames=0,
                 print_interval=1):
@@ -292,13 +283,12 @@ class SpeakerNet(nn.Module):
         """
         tstart = time.time()
         self.eval()
-        if prepare_cohorts:
+        if prepare_type == 'cohorts':
             # Prepare cohorts for score normalization.
             feats = []
             read_file = Path(from_path)
             files = []
             used_speakers = []
-            prepare_cohorts = True
             with open(read_file) as listfile:
                 while True:
                     line = listfile.readline()
@@ -318,10 +308,10 @@ class SpeakerNet(nn.Module):
             setfiles.sort()
 
             # Save all features to file
-            for idx, f in tqdm(enumerate(setfiles)):
+            for idx, f in enumerate(tqdm(setfiles)):
                 inp1 = torch.FloatTensor(
                     loadWAV(f, eval_frames, evalmode=True,
-                            num_eval=num_eval)).cuda()
+                            num_eval=num_eval)).to(self.device)
 
                 feat = self.__S__.forward(inp1)
                 if self.__L__.test_normalize:
@@ -332,77 +322,61 @@ class SpeakerNet(nn.Module):
                 feats.append(feat)
 
             np.save(save_path, np.array(feats))
-        else:
+        elif prepare_type == 'embed':
             # Prepare mean L2-normalized embeddings for known speakers.
             speaker_dirs = [x for x in Path(from_path).iterdir() if x.is_dir()]
-            feats = None
+            embeds = None
             classes = {}
             # Save mean features
             for idx, speaker_dir in enumerate(speaker_dirs):
                 classes[idx] = speaker_dir.stem
                 files = list(speaker_dir.glob('*.wav'))
-                feat = None
+                mean_embed = None
                 for f in files:
-                    inp = torch.FloatTensor(
-                        loadWAV(f,
-                                eval_frames,
-                                evalmode=True,
-                                num_eval=num_eval)).cuda()
-                    with torch.no_grad():
-                        ref_feat = self.__S__.forward(inp)
-                        if feat is None:
-                            feat = F.normalize(ref_feat, p=2,
-                                               dim=1).unsqueeze(0)
-                        else:
-                            feat = torch.cat(
-                                (feat, F.normalize(ref_feat, p=2,
-                                                   dim=1).unsqueeze(0)), 0)
-                feat = torch.mean(feat, dim=0)
-                if feats is None:
-                    feats = feat.unsqueeze(0)
+                    embed = self.embed_utterance(
+                        f,
+                        eval_frames=eval_frames,
+                        num_eval=num_eval,
+                        normalize=self.__L__.test_normalize)
+                    if mean_embed is None:
+                        mean_embed = embed.unsqueeze(0)
+                    else:
+                        mean_embed = torch.cat(
+                            (mean_embed, embed.unsqueeze(0)), 0)
+                mean_embed = torch.mean(mean_embed, dim=0)
+                if embeds is None:
+                    embeds = mean_embed.unsqueeze(-1)
                 else:
-                    feats = torch.cat((feats, feat.unsqueeze(0)), 0)
+                    embeds = torch.cat((embeds, mean_embed.unsqueeze(-1)), -1)
                 telapsed = time.time() - tstart
                 if idx % print_interval == 0:
                     sys.stdout.write(
                         "\rReading %d of %d: %.4f s, embedding size %d" %
-                        (idx, len(speaker_dirs), telapsed /
-                         (idx + 1), ref_feat.size()[1]))
+                        (idx, len(speaker_dirs), telapsed / (idx + 1), embed.size()[1]))
             print('')
-            feats = rearrange(feats,
-                              'n_class n_sam feat -> n_sam feat n_class')
-            print(feats.shape)
-            torch.save(feats, Path(save_path, 'embeds.pt'))
+            print(embeds.shape)
+            # embeds = rearrange(embeds, 'n_class n_sam feat -> n_sam feat n_class')
+            torch.save(embeds, Path(save_path, 'embeds.pt'))
             np.save(Path(save_path, 'classes.npy'), classes)
+        else:
+            raise NotImplementedError
 
-    def predict(self,
-                from_path='../data/test_1',
-                embeds_path='checkpoints/embeds.pt',
-                classes_path='checkpoints/classes.npy',
-                num_eval=10,
-                eval_frames=0,
-                print_interval=1):
+    def embed_utterance(self,
+                        fpath,
+                        eval_frames=0,
+                        num_eval=10,
+                        normalize=True):
         """
-        Predict new utterance based on distance between its embedding and saved embeddings.
+        Get embedding from utterance
         """
-        self.eval()
-        feats = torch.load(embeds_path)
-        classes = np.load(classes_path, allow_pickle=True).item()
-        files = list(Path(from_path).glob('*/*.wav'))
-        for f in tqdm(files):
-            inp = torch.FloatTensor(
-                loadWAV(f, eval_frames, evalmode=True,
-                        num_eval=num_eval)).cuda()
-            with torch.no_grad():
-                feat = self.__S__.forward(inp)
-                feat = F.normalize(feat, p=2, dim=1)
-
-            # NOTE: If the embeddings are L2 normalized, the squared Euclidean distance is directly proportional to the cosine distance.
-            feat = feat.unsqueeze(-1)
-            dist = F.pairwise_distance(feat, feats).detach().cpu().numpy()
-            dist = np.mean(dist, axis=0)
-            tqdm.write(
-                f'{f}, {classes[np.argmin(dist)]}, {1 - np.min(dist)**2 / 2}')
+        inp = torch.FloatTensor(
+            loadWAV(fpath, eval_frames, evalmode=True,
+                    num_eval=num_eval)).to(self.device)
+        with torch.no_grad():
+            embed = self.__S__.forward(inp)
+        if normalize:
+            embed = F.normalize(embed, p=2, dim=1)
+        return embed
 
     def saveParameters(self, path):
         torch.save(self.state_dict(), path)
