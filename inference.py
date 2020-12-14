@@ -210,6 +210,7 @@ cohorts = np.load('checkpoints/cohorts_final_500_f100.npy')
 top_cohorts = 200
 threshold = 1.7206447124481201
 eval_frames = 100
+num_eval = 10
 
 if __name__ == '__main__':
     # Evaluation code
@@ -249,6 +250,7 @@ if __name__ == '__main__':
         model.prepare(eval_frames=args.eval_frames,
                       from_path=args.test_list,
                       save_path=args.save_path,
+                      num_eval=num_eval,
                       prepare_type=args.prepare_type)
         sys.exit(1)
 
@@ -278,16 +280,16 @@ if __name__ == '__main__':
                     files.append(Path(data[2]))
 
             files = list(set(files))
-            files.sort()
         else:
             files = list(Path(args.test_list).glob('*/*.wav'))
+        files.sort()
 
         same_smallest_score = 1
         diff_biggest_score = 0
         for f in tqdm(files):
             embed = model.embed_utterance(f,
                                           eval_frames=args.eval_frames,
-                                          num_eval=10,
+                                          num_eval=num_eval,
                                           normalize=model.__L__.test_normalize)
             embed = embed.unsqueeze(-1)
             dist = F.pairwise_distance(embed, embeds).detach().cpu().numpy()

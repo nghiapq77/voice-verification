@@ -11,7 +11,12 @@ pip install -r requirements.txt
 1. Download the [public dataset](https://dl.challenge.zalo.ai/voice-verification/data/Train-Test-Data_v2.zip)
 then put the training speakers data in `dataset/wavs` and public-test folder in `dataset/public-test`
 
-2. Prepare the augment data  
+2. Convert data (this will overwrite original data)
+```python
+python dataprep.py --save_path dataset/wavs --convert
+```
+
+3. Prepare the augment data  
 ```python
 python dataprep.py --save_path dataset --augment
 ```
@@ -20,6 +25,8 @@ python dataprep.py --save_path dataset --augment
 ```python
 python dataprep.py --save_path dataset/wavs --generate --split_ratio -1
 ```
+
+In addition to the Python dependencies, `wget` and `ffmpeg` must be installed on the system.
 
 ## Pretrained models
 Pretrained models and corresponding cohorts can be downloaded from [here](https://drive.google.com/drive/folders/15FYmgHGKlF_JSyPGKfJzBRhQpBY5JcBw?usp=sharing).

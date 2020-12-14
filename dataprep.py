@@ -1,6 +1,3 @@
-# The script downloads the augment datasets and extract them.
-# Requirement: wget running on a Linux system.
-
 import argparse
 import os
 import subprocess
@@ -11,6 +8,7 @@ from zipfile import ZipFile
 from scipy.io import wavfile
 from pathlib import Path
 import random
+from tqdm import tqdm
 
 # Parse input arguments
 parser = argparse.ArgumentParser(description="VoxCeleb downloader")
@@ -24,6 +22,10 @@ parser.add_argument('--split_ratio',
                     default=0.1,
                     help='Split ratio')
 
+parser.add_argument('--convert',
+                    dest='convert',
+                    action='store_true',
+                    help='Enable coversion')
 parser.add_argument('--generate',
                     dest='generate',
                     action='store_true',
@@ -57,10 +59,9 @@ def download(args, lines):
         outfile = url.split('/')[-1]
 
         # Download files
-        out = subprocess.call(
-            'wget %s -O %s/%s' %
-            (url, args.save_path, outfile),
-            shell=True)
+        out = subprocess.call('wget %s -O %s/%s' %
+                              (url, args.save_path, outfile),
+                              shell=True)
         if out != 0:
             raise ValueError(
                 'Download failed %s. If download fails repeatedly, use alternate URL on the VoxCeleb website.'
@@ -120,6 +121,24 @@ def split_musan(args):
         print(idx, file)
 
 
+def convert(args):
+    files = list(Path(args.save_path).glob('*/*.wav'))
+    files.sort()
+    print('Converting files')
+    for fpath in tqdm(files):
+        fpath = str(fpath).replace('(', '\(')
+        fpath = fpath.replace(')', '\)')
+        outpath = fpath[:-4] + '_conv' + fpath[-4:]
+        out = subprocess.call(
+            'ffmpeg -y -i %s -ac 1 -vn -acodec pcm_s16le -ar 16000 %s >/dev/null 2>/dev/null'
+            % (fpath, outpath),
+            shell=True)
+        if out != 0:
+            raise ValueError('Conversion failed %s.' % fpath)
+        subprocess.call('rm %s' % (fpath), shell=True)
+        subprocess.call('mv %s %s' % (outpath, fpath), shell=True)
+
+
 def generate_lists(args):
     """
     Generate train test lists for zalo data
@@ -131,7 +150,7 @@ def generate_lists(args):
     val_filepaths_list = []
     for classpath in classpaths:
         filepaths = list(classpath.glob('*.wav'))
-        val_num = 2
+        val_num = 3  # 3 utterances per speaker for val
         if args.split_ratio > 0:
             val_num = int(args.split_ratio * len(filepaths))
         random.shuffle(filepaths)
@@ -182,3 +201,5 @@ if __name__ == "__main__":
 
     if args.generate:
         generate_lists(args)
+    if args.convert:
+        convert(args)
