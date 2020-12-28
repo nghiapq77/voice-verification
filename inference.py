@@ -58,7 +58,7 @@ parser.add_argument('--trainfunc',
                     default="softmaxproto",
                     help='Loss function')
 
-## Optimizer
+# Optimizer
 parser.add_argument('--optimizer',
                     type=str,
                     default="adam",
@@ -82,8 +82,7 @@ parser.add_argument(
     "--hard_prob",
     type=float,
     default=0.5,
-    help=
-    'Hard negative mining probability, otherwise random, only for some loss functions'
+    help='Hard negative mining probability, otherwise random, only for some loss functions'
 )
 parser.add_argument(
     "--hard_rank",
@@ -103,15 +102,13 @@ parser.add_argument(
     '--nPerSpeaker',
     type=int,
     default=2,
-    help=
-    'Number of utterances per speaker per batch, only for metric learning based losses'
+    help='Number of utterances per speaker per batch, only for metric learning based losses'
 )
 parser.add_argument(
     '--nClasses',
     type=int,
     default=400,
-    help=
-    'Number of speakers in the softmax layer, only for softmax-based losses')
+    help='Number of speakers in the softmax layer, only for softmax-based losses')
 
 # Load and save
 parser.add_argument('--initial_model',

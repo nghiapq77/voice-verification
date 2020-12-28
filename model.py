@@ -93,8 +93,7 @@ class SpeakerNet(nn.Module):
                          cohorts_path='dataset/cohorts.npy',
                          print_interval=100,
                          num_eval=10,
-                         eval_frames=None,
-                         is_train=False):
+                         eval_frames=None):
 
         self.eval()
 
@@ -104,7 +103,8 @@ class SpeakerNet(nn.Module):
         tstart = time.time()
 
         # Cohorts
-        cohorts = np.load(cohorts_path)
+        if cohorts_path is not None:
+            cohorts = np.load(cohorts_path)
 
         # Read all lines
         with open(listfilename) as listfile:
@@ -162,7 +162,7 @@ class SpeakerNet(nn.Module):
                 com_feat = F.normalize(com_feat, p=2, dim=1)
 
             # NOTE: distance for training, normalized score for evaluating and testing
-            if is_train:
+            if cohorts_path is None:
                 dist = F.pairwise_distance(
                     ref_feat.unsqueeze(-1),
                     com_feat.unsqueeze(-1).transpose(
@@ -212,7 +212,7 @@ class SpeakerNet(nn.Module):
         with open(read_file, newline='') as rf:
             spamreader = csv.reader(rf, delimiter=',')
             next(spamreader, None)
-            for i, row in enumerate(tqdm(spamreader)):
+            for row in tqdm(spamreader):
                 files.append(row[0])
                 files.append(row[1])
                 lines.append(row)
@@ -223,7 +223,6 @@ class SpeakerNet(nn.Module):
         # Save all features to file
         for idx, file in enumerate(setfiles):
             inp1 = torch.FloatTensor(
-                # loadWAV(os.path.join(data_root, file),
                 loadWAV(Path(data_root, file),
                         eval_frames,
                         evalmode=True,

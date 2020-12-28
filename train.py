@@ -75,8 +75,7 @@ parser.add_argument(
     "--hard_prob",
     type=float,
     default=0.5,
-    help=
-    'Hard negative mining probability, otherwise random, only for some loss functions'
+    help='Hard negative mining probability, otherwise random, only for some loss functions'
 )
 parser.add_argument(
     "--hard_rank",
@@ -96,15 +95,13 @@ parser.add_argument(
     '--nPerSpeaker',
     type=int,
     default=2,
-    help=
-    'Number of utterances per speaker per batch, only for metric learning based losses'
+    help='Number of utterances per speaker per batch, only for metric learning based losses'
 )
 parser.add_argument(
     '--nClasses',
     type=int,
     default=400,
-    help=
-    'Number of speakers in the softmax layer, only for softmax-based losses')
+    help='Number of speakers in the softmax layer, only for softmax-based losses')
 
 # Load and save
 parser.add_argument('--initial_model',
@@ -227,10 +224,8 @@ while (1):
         print(time.strftime("%Y-%m-%d %H:%M:%S"), it, "Evaluating...")
 
         sc, lab, _ = s.evaluateFromList(args.test_list,
-                                        print_interval=100,
-                                        test_path=args.test_path,
-                                        eval_frames=args.eval_frames,
-                                        is_train=True)
+                                        cohorts_path=None,
+                                        eval_frames=args.eval_frames)
         result = tuneThresholdfromScore(sc, lab, [1, 0.1])
 
         min_eer.append(result[1])
